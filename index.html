@@ -177,10 +177,11 @@ footer{color:var(--muted);font-size:12px;line-height:1.6;text-align:center;margi
 </section>
 
 <section class="step">
-  <div class="step-head"><span class="num">04</span><h2>Respaldo</h2></div>
-  <p class="hint">La firma vive solo en este navegador y en esta direccion web. Si cambias de
-    equipo, de navegador o de direccion, no viaja contigo. Baja el respaldo y guardalo donde
-    guardas tus cosas importantes: con ese archivo la recuperas en cualquier lado, en un clic.</p>
+  <div class="step-head"><span class="num">04</span><h2>Respaldo de firma y sello</h2></div>
+  <p class="hint">El respaldo se lleva las cuatro cosas: <b>firma, sello, nombre y empresa</b>.
+    Todo eso vive solo en este navegador y en esta direccion web, asi que si cambias de equipo,
+    de navegador o de direccion, no viaja contigo. Baja el archivo y guardalo donde guardas tus
+    cosas importantes: con el recuperas todo en cualquier lado, en un clic.</p>
   <div class="row">
     <button class="primary" id="bkDown">Descargar respaldo</button>
     <label class="tab" for="bkFile" style="flex:1;text-align:center;line-height:1.4">Restaurar respaldo</label>
@@ -568,8 +569,8 @@ function bkRefresh(){
   const when=localStorage.getItem(K_BK), el=$('bkWhen');
   $('bkDown').disabled=!has;
   if(!has){el.className='bk-when';el.textContent='Guarda primero tu firma o tu sello.';return;}
-  if(when){el.className='bk-when';el.textContent='Ultimo respaldo: '+new Date(when).toLocaleString('es');}
-  else{el.className='bk-when never';el.textContent='Todavia no has bajado ningun respaldo. Si este navegador se limpia, la firma se pierde.';}
+  if(when){el.className='bk-when';el.textContent='Ultimo respaldo de firma y sello: '+new Date(when).toLocaleString('es');}
+  else{el.className='bk-when never';el.textContent='Todavia no has bajado ningun respaldo. Si este navegador se limpia, pierdes firma y sello.';}
 }
 
 $('bkDown').onclick=()=>{
@@ -579,7 +580,7 @@ $('bkDown').onclick=()=>{
   const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url;a.download='respaldo-firma-'+data.savedAt.slice(0,10)+'.json';
+  a.href=url;a.download='respaldo-firma-y-sello-'+data.savedAt.slice(0,10)+'.json';
   document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),5000);
   localStorage.setItem(K_BK,data.savedAt);bkRefresh();
@@ -591,7 +592,7 @@ $('bkFile').onchange=async e=>{
   try{ d=JSON.parse(await f.text()); }
   catch(err){ alert('Ese archivo no se puede leer. Elige el .json que bajaste con "Descargar respaldo".');return; }
   if(!d||d.app!=='pi-signing'||(!d.sig&&!d.stamp)){
-    alert('Ese archivo no es un respaldo de firma.');return;}
+    alert('Ese archivo no es un respaldo de firma y sello.');return;}
   const got=[];
   if(d.sig){localStorage.setItem(K_SIG,d.sig);showSaved('sig',d.sig);got.push('firma');}
   if(d.stamp){localStorage.setItem(K_STAMP,d.stamp);showSaved('stamp',d.stamp);got.push('sello');}
