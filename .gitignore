@@ -6,3 +6,5 @@ attachments/
 attachments.zip
 .DS_Store
 index.html.bak-*
+respaldo-firma*.json
+*.json
