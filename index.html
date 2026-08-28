@@ -98,6 +98,12 @@ label.fld{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;let
 footer{color:var(--muted);font-size:12px;line-height:1.6;text-align:center;margin-top:26px}
 .note{background:rgba(47,111,208,.1);border:1px solid rgba(47,111,208,.35);border-radius:10px;
   padding:12px 14px;font-size:13px;line-height:1.55;color:#c5d4ea;margin-top:14px}
+.warn{background:rgba(214,158,46,.12);border:1px solid rgba(214,158,46,.45);border-radius:10px;
+  padding:12px 14px;font-size:13px;line-height:1.55;color:#e8d3a4;margin:0 0 18px}
+.warn a{color:#f0c674;font-weight:600;word-break:break-all}
+.warn b{color:#f5e0b5}
+.bk-when{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5}
+.bk-when.never{color:#e8c07a}
 .done{background:rgba(63,157,107,.12);border:1px solid rgba(63,157,107,.4);border-radius:10px;
   padding:14px;font-size:13px;line-height:1.55;color:#bfe3cf;margin-top:14px}
 .done code{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#e8e4dc}
@@ -117,6 +123,8 @@ footer{color:var(--muted);font-size:12px;line-height:1.6;text-align:center;margi
   <button role="tab" aria-selected="false" data-screen="setup">Firma y sello</button>
   <button role="tab" aria-selected="true" data-screen="sign">Firmar un PI</button>
 </div>
+
+<div id="hostWarn" class="warn hide"></div>
 
 <div id="scr-setup" class="hide">
 <section class="step">
@@ -166,6 +174,19 @@ footer{color:var(--muted);font-size:12px;line-height:1.6;text-align:center;margi
   <div style="height:12px"></div>
   <label class="fld" for="whoCo">Empresa</label>
   <input type="text" id="whoCo" placeholder="Latin Trading Co. S.A.">
+</section>
+
+<section class="step">
+  <div class="step-head"><span class="num">04</span><h2>Respaldo</h2></div>
+  <p class="hint">La firma vive solo en este navegador y en esta direccion web. Si cambias de
+    equipo, de navegador o de direccion, no viaja contigo. Baja el respaldo y guardalo donde
+    guardas tus cosas importantes: con ese archivo la recuperas en cualquier lado, en un clic.</p>
+  <div class="row">
+    <button class="primary" id="bkDown">Descargar respaldo</button>
+    <label class="tab" for="bkFile" style="flex:1;text-align:center;line-height:1.4">Restaurar respaldo</label>
+    <input type="file" id="bkFile" accept="application/json,.json">
+  </div>
+  <div class="bk-when" id="bkWhen"></div>
 </section>
 
 <div class="status">
@@ -536,12 +557,68 @@ $('exportBtn').onclick=async()=>{
   }finally{ btn.disabled=false;btn.textContent=label; }
 };
 
+/* ---------------- respaldo a archivo ---------------- */
+/* localStorage se pierde solo: cambia el dominio (cada deploy de Vercel estrena
+   hostname), Safari lo borra a los 7 dias sin visitas, o se limpia el historial.
+   El archivo de respaldo es lo unico que sobrevive a todo eso. */
+const K_BK='pi_backup_at', STABLE_HOST='pi-signing-claudios-projects-0963cce2.vercel.app';
+
+function bkRefresh(){
+  const has=!!localStorage.getItem(K_SIG)||!!localStorage.getItem(K_STAMP);
+  const when=localStorage.getItem(K_BK), el=$('bkWhen');
+  $('bkDown').disabled=!has;
+  if(!has){el.className='bk-when';el.textContent='Guarda primero tu firma o tu sello.';return;}
+  if(when){el.className='bk-when';el.textContent='Ultimo respaldo: '+new Date(when).toLocaleString('es');}
+  else{el.className='bk-when never';el.textContent='Todavia no has bajado ningun respaldo. Si este navegador se limpia, la firma se pierde.';}
+}
+
+$('bkDown').onclick=()=>{
+  const data={app:'pi-signing',v:1,savedAt:new Date().toISOString(),
+    sig:localStorage.getItem(K_SIG)||null, stamp:localStorage.getItem(K_STAMP)||null,
+    name:localStorage.getItem(K_NAME)||'', co:localStorage.getItem(K_CO)||''};
+  const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='respaldo-firma-'+data.savedAt.slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+  localStorage.setItem(K_BK,data.savedAt);bkRefresh();
+};
+
+$('bkFile').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  let d;
+  try{ d=JSON.parse(await f.text()); }
+  catch(err){ alert('Ese archivo no se puede leer. Elige el .json que bajaste con "Descargar respaldo".');return; }
+  if(!d||d.app!=='pi-signing'||(!d.sig&&!d.stamp)){
+    alert('Ese archivo no es un respaldo de firma.');return;}
+  const got=[];
+  if(d.sig){localStorage.setItem(K_SIG,d.sig);showSaved('sig',d.sig);got.push('firma');}
+  if(d.stamp){localStorage.setItem(K_STAMP,d.stamp);showSaved('stamp',d.stamp);got.push('sello');}
+  if(d.name){localStorage.setItem(K_NAME,d.name);$('whoName').value=d.name;}
+  if(d.co){localStorage.setItem(K_CO,d.co);$('whoCo').value=d.co;}
+  refreshWarn();bkRefresh();
+  alert('Restaurado: '+got.join(' y ')+'.');
+};
+
+/* aviso: direccion temporal de Vercel = otro cajon de almacenamiento */
+if(location.hostname.endsWith('.vercel.app')&&location.hostname!==STABLE_HOST){
+  $('hostWarn').innerHTML='<b>Estas en una direccion temporal.</b> Cada vez que la app se '+
+    'actualiza, Vercel estrena una direccion como esta, y el navegador guarda la firma por '+
+    'direccion: aqui aparece vacia aunque no se haya borrado nada. Usa siempre '+
+    '<a href="https://'+STABLE_HOST+'">'+STABLE_HOST+'</a> y marcala en favoritos.';
+  $('hostWarn').classList.remove('hide');
+}
+
+/* pedir almacenamiento persistente (mitiga el borrado a 7 dias de Safari) */
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
+
 /* ---------------- restaurar ---------------- */
 const _s=localStorage.getItem(K_SIG);if(_s)showSaved('sig',_s);
 const _t=localStorage.getItem(K_STAMP);if(_t)showSaved('stamp',_t);
 $('whoName').value=localStorage.getItem(K_NAME)||'';
 $('whoCo').value=localStorage.getItem(K_CO)||'';
-refreshWarn();
+refreshWarn();bkRefresh();
 let rt;window.addEventListener('resize',()=>{if(pdfDoc){clearTimeout(rt);rt=setTimeout(render,180);}});
 </script>
 </body>
