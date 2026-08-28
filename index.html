@@ -101,6 +101,8 @@ footer{color:var(--muted);font-size:12px;line-height:1.6;text-align:center;margi
 .done{background:rgba(63,157,107,.12);border:1px solid rgba(63,157,107,.4);border-radius:10px;
   padding:14px;font-size:13px;line-height:1.55;color:#bfe3cf;margin-top:14px}
 .done code{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#e8e4dc}
+.done a.dl{display:inline-block;margin-top:8px;color:var(--ok);font-weight:600;text-decoration:underline}
+.done button{margin-top:8px;margin-left:10px;padding:7px 12px;font-size:13px}
 </style>
 </head>
 <body>
@@ -184,6 +186,7 @@ footer{color:var(--muted);font-size:12px;line-height:1.6;text-align:center;margi
     <div id="doneBox" class="done hide"></div>
   </div>
   <div id="viewPane" class="hide">
+    <div id="exportBox" class="done hide" style="margin-bottom:14px"></div>
     <div id="stage"></div>
     <div class="pager">
       <button id="prevPg">←</button>
@@ -213,6 +216,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/p
 const {PDFDocument}=PDFLib;
 const K_SIG='pi_sig',K_STAMP='pi_stamp',K_NAME='pi_name',K_CO='pi_co';
 const $=id=>document.getElementById(id);
+let lastURL=null,lastBlob=null,lastName='';
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
 document.querySelectorAll('.screens button').forEach(b=>b.onclick=()=>{
@@ -344,7 +348,7 @@ $('pdfFile').onchange=async e=>{
   pdfBytes=new Uint8Array(buf.slice(0));
   pdfDoc=await pdfjsLib.getDocument({data:new Uint8Array(buf.slice(0))}).promise;
   pages=pdfDoc.numPages;page=1;marks={};
-  $('doneBox').classList.add('hide');
+  $('doneBox').classList.add('hide');$('exportBox').classList.add('hide');
   $('loadPane').classList.add('hide');$('viewPane').classList.remove('hide');$('dock').classList.remove('hide');
   await render();e.target.value='';
 };
@@ -369,7 +373,7 @@ async function render(){
 $('prevPg').onclick=()=>{if(page>1){page--;render();}};
 $('nextPg').onclick=()=>{if(page<pages){page++;render();}};
 $('closePdf').onclick=()=>{
-  pdfDoc=null;pdfBytes=null;marks={};$('stage').innerHTML='';
+  pdfDoc=null;pdfBytes=null;marks={};$('stage').innerHTML='';$('exportBox').classList.add('hide');
   $('viewPane').classList.add('hide');$('loadPane').classList.remove('hide');$('dock').classList.add('hide');
 };
 
@@ -504,22 +508,29 @@ $('exportBtn').onclick=async()=>{
     const out=await doc.save();
     const blob=new Blob([out],{type:'application/pdf'});
     const name=fileName+'_firmado.pdf';
-    let shared=false;
+    /* Descargar SIEMPRE: la hoja de Compartir de macOS no tiene "Guardar en Archivos",
+       asi que el share-primero dejaba al usuario sin forma de grabar el PDF. */
+    if(lastURL)URL.revokeObjectURL(lastURL);
+    lastURL=URL.createObjectURL(blob);lastBlob=blob;lastName=name;
+    const a=document.createElement('a');
+    a.href=lastURL;a.download=name;
+    document.body.appendChild(a);a.click();a.remove();
+    let canShare=false;
     try{
-      const file=new File([blob],name,{type:'application/pdf'});
-      if(navigator.canShare&&navigator.canShare({files:[file]})){
-        await navigator.share({files:[file],title:name});shared=true;
-      }
-    }catch(e){ if(e&&e.name==='AbortError')shared=true; }
-    if(!shared){
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(blob);a.download=name;
-      document.body.appendChild(a);a.click();a.remove();
-      setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-    }
-    $('doneBox').innerHTML='PDF firmado: <code>'+esc(name)+'</code><br>'+
-      total+' elemento'+(total>1?'s':'')+' estampado'+(total>1?'s':'')+'.';
-    $('doneBox').classList.remove('hide');
+      canShare=!!(navigator.canShare&&navigator.canShare({files:[new File([blob],name,{type:'application/pdf'})]}));
+    }catch(e){ canShare=false; }
+    $('exportBox').innerHTML='PDF firmado: <code>'+esc(name)+'</code><br>'+
+      total+' elemento'+(total>1?'s':'')+' estampado'+(total>1?'s':'')+
+      '. Revisa tu carpeta de Descargas.<br>'+
+      '<a class="dl" href="'+lastURL+'" download="'+esc(name)+'">Descargar de nuevo</a>'+
+      (canShare?'<button id="shareBtn" class="ghost">Compartir…</button>':'');
+    $('exportBox').classList.remove('hide');
+    const sb=$('shareBtn');
+    if(sb)sb.onclick=async()=>{
+      try{
+        await navigator.share({files:[new File([lastBlob],lastName,{type:'application/pdf'})],title:lastName});
+      }catch(e){ if(!(e&&e.name==='AbortError'))alert('No se pudo compartir: '+(e&&e.message?e.message:e)); }
+    };
   }catch(err){
     alert('No se pudo generar el PDF: '+(err&&err.message?err.message:err));
   }finally{ btn.disabled=false;btn.textContent=label; }

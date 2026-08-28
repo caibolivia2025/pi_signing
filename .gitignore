@@ -1,0 +1,8 @@
+# datos de negocio — nunca al repo
+*.pdf
+*.xlsx
+~$*
+attachments/
+attachments.zip
+.DS_Store
+index.html.bak-*
